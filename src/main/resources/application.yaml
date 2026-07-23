@@ -1,0 +1,26 @@
+spring:
+  application:
+    name: PolicyDecisionPointService
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/AuthenticationDB
+    username: root
+    password: SM231198
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.web.client: DEBUG
+    org.apache.hc.client5.http: DEBUG
+
+server:
+  port: 5059
