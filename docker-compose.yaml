@@ -1,0 +1,6 @@
+services:
+  authentication-service:
+    build: .
+    container_name: pdp-service
+    ports:
+      - "5059:5059"
