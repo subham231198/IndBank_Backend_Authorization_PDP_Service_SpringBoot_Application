@@ -5,6 +5,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
@@ -136,6 +137,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidChannelException.class)
     public ResponseEntity<?> handleInvalidChannelException(InvalidChannelException ex) {
+        Map<String, Object> responseBody = new LinkedHashMap<>();
+        responseBody.put("code", 401);
+        responseBody.put("reason", "Unauthorized");
+        responseBody.put("message", ex.getMessage());
+        return ResponseEntity.status(401).body(responseBody);
+    }
+
+    @ExceptionHandler(ResourceAccessException.class)
+    public ResponseEntity<?> handleResourceAccessException(ResourceAccessException ex){
         Map<String, Object> responseBody = new LinkedHashMap<>();
         responseBody.put("code", 401);
         responseBody.put("reason", "Unauthorized");
