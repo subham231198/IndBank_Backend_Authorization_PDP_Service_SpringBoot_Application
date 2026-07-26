@@ -24,3 +24,18 @@ logging:
 
 server:
   port: 5059
+  tomcat:
+    # Connection timeout - 2 minutes (in milliseconds)
+    connection-timeout: 120000
+    # Keep-alive timeout - 2 minutes
+    keep-alive-timeout: 120000
+    # Maximum number of keep-alive requests
+    max-keep-alive-requests: 100
+    # Thread pool configuration
+    threads:
+      max: 500
+      min-spare: 10
+    # Maximum connections
+    max-connections: 3000
+    # Accept count (backlog)
+    accept-count: 100
