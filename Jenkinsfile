@@ -142,7 +142,7 @@ metadata:
   labels:
     app: ${APP_NAME}
 spec:
-  replicas: 5
+  replicas: 1
   selector:
     matchLabels:
       app: ${APP_NAME}
