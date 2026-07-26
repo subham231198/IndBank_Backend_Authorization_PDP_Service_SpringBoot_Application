@@ -46,7 +46,7 @@ public class SessionAttributesService {
             return ResponseEntity.ok(output);
         }
         else {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("valid", false));
+            return ResponseEntity.status(HttpStatus.OK).body(Map.of("valid", false));
         }
     }
 
@@ -77,7 +77,7 @@ public class SessionAttributesService {
             return ResponseEntity.ok(output);
         }
         else {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("valid", false));
+            return ResponseEntity.status(HttpStatus.OK).body(Map.of("valid", false));
         }
     }
 

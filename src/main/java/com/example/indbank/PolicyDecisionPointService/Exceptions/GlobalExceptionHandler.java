@@ -125,7 +125,7 @@ public class GlobalExceptionHandler {
         responseBody.put("code", 401);
         responseBody.put("reason", "Unauthorized");
         responseBody.put("message", "Error resolving user from JSON");
-        return ResponseEntity.status(400).body(responseBody);
+        return ResponseEntity.status(401).body(responseBody);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
