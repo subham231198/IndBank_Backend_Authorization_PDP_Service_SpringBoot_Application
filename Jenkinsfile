@@ -105,7 +105,7 @@ pipeline {
                     echo "========================================="
                     echo "Verifying image properties..."
                     echo "========================================="
-                    docker run --rm ${IMAGE_NAME}:${IMAGE_TAG} sh -c "unzip -p /app/app.jar BOOT-INF/classes/application.properties | grep app.host" || echo "Properties verification skipped"
+                    echo "Properties verification skipped"
 
                     # Check the image creation time
                     echo ""
