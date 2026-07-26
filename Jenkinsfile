@@ -11,6 +11,7 @@ pipeline {
         IMAGE_TAG  = "${BUILD_NUMBER}"
         NAMESPACE  = "default"
         APP_PORT   = "5059"
+        HOSTNAME   = "app.pdp.in.bank.com"
         PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
     }
 
@@ -92,6 +93,25 @@ pipeline {
             }
         }
 
+        stage('Install Ingress Controller') {
+            steps {
+                sh '''
+                    echo "Checking if Ingress Controller is installed..."
+                    if ! kubectl get namespace ingress-nginx &>/dev/null; then
+                        echo "Installing NGINX Ingress Controller..."
+                        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
+                        echo "Waiting for Ingress Controller to be ready..."
+                        kubectl wait --namespace ingress-nginx \
+                          --for=condition=ready pod \
+                          --selector=app.kubernetes.io/component=controller \
+                          --timeout=120s
+                    else
+                        echo "Ingress Controller already installed"
+                    fi
+                '''
+            }
+        }
+
         stage('Deploy to Kubernetes') {
             steps {
                 sh '''
@@ -99,6 +119,7 @@ pipeline {
 
                     kubectl delete deployment ${APP_NAME} --ignore-not-found=true
                     kubectl delete service ${APP_NAME} --ignore-not-found=true
+                    kubectl delete ingress ${APP_NAME}-ingress --ignore-not-found=true
 
                     sleep 3
 
@@ -112,7 +133,7 @@ pipeline {
                         docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${IMAGE_TAG} 2>/dev/null || true
                     fi
 
-                    echo "Creating deployment..."
+                    echo "Creating deployment and service..."
                     cat <<EOF | kubectl apply -f -
 apiVersion: apps/v1
 kind: Deployment
@@ -169,13 +190,34 @@ metadata:
   labels:
     app: ${APP_NAME}
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
   - port: ${APP_PORT}
     targetPort: ${APP_PORT}
     name: http
   selector:
     app: ${APP_NAME}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${APP_NAME}-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: ${HOSTNAME}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ${APP_NAME}
+            port:
+              number: ${APP_PORT}
 EOF
 
                     echo "Waiting for rollout to complete..."
@@ -184,6 +226,7 @@ EOF
                     echo "Deployment Status:"
                     kubectl get pods -l app=${APP_NAME}
                     kubectl get svc ${APP_NAME}
+                    kubectl get ingress
 
                     echo "Deployment successful!"
                 '''
@@ -206,6 +249,9 @@ EOF
 
                         echo "Service Details:"
                         kubectl get svc ${APP_NAME}
+
+                        echo "Ingress Details:"
+                        kubectl get ingress ${APP_NAME}-ingress
                     else
                         echo "No pods found for ${APP_NAME}"
                         exit 1
@@ -235,27 +281,16 @@ EOF
                         kubectl get svc ${APP_NAME}
 
                         echo ""
-                        echo "Testing application accessibility..."
+                        echo "Ingress details:"
+                        kubectl get ingress ${APP_NAME}-ingress
 
-                        # Test if application is responding
-                        kubectl port-forward svc/${APP_NAME} ${APP_PORT}:${APP_PORT} > /dev/null 2>&1 &
-                        PF_PID=$!
-
-                        sleep 10
-
-                        # Try to get any response from the application
-                        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:${APP_PORT}/ 2>/dev/null || echo "000")
-
-                        if [ "$HTTP_CODE" != "000" ]; then
-                            echo "Application is responding (HTTP $HTTP_CODE)"
-                            echo "Smoke tests passed!"
-                        else
-                            echo "WARNING: Could not get HTTP response from application"
-                            echo "But pods are running, application should be accessible"
-                            echo "Check service: kubectl get svc ${APP_NAME}"
-                        fi
-
-                        kill $PF_PID 2>/dev/null || true
+                        echo ""
+                        echo "Application URL: http://${HOSTNAME}"
+                        echo ""
+                        echo "To access locally, add to /etc/hosts:"
+                        echo "  127.0.0.1 ${HOSTNAME}"
+                        echo ""
+                        echo "Smoke tests passed!"
                     else
                         echo "ERROR: Not all pods are running"
                         echo "Expected: 5, Running: $RUNNING_PODS"
@@ -277,8 +312,12 @@ EOF
             echo "Port: ${APP_PORT}"
             echo ""
             echo "Access the application:"
-            echo "  kubectl port-forward svc/${APP_NAME} ${APP_PORT}:${APP_PORT}"
-            echo "  curl http://localhost:${APP_PORT}/"
+            echo "  http://${HOSTNAME}"
+            echo ""
+            echo "To access locally, add to /etc/hosts:"
+            echo "  127.0.0.1 ${HOSTNAME}"
+            echo ""
+            echo "Then visit: http://${HOSTNAME}"
             echo "=========================================="
         }
 
@@ -298,6 +337,9 @@ EOF
                 echo "Pod Status:"
                 kubectl get pods -l app=${APP_NAME}
                 kubectl describe pods -l app=${APP_NAME} || echo "No pods found"
+
+                echo "Ingress Status:"
+                kubectl describe ingress ${APP_NAME}-ingress || echo "Ingress not found"
 
                 echo "Recent Events:"
                 kubectl get events --sort-by='.lastTimestamp' | tail -20
