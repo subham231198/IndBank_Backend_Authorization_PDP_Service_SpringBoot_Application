@@ -8,7 +8,8 @@ pipeline {
     environment {
         APP_NAME   = "pdp-service"
         IMAGE_NAME = "pdp-service"
-        IMAGE_TAG = sh(script: "date +%Y%m%d-%H%M%S", returnStdout: true).trim()
+        // Use Jenkins build number as tag
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
         NAMESPACE  = "default"
         APP_PORT   = "5059"
         HOSTNAME   = "app.pdp.in.bank.com"
@@ -81,7 +82,9 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                    echo "Building Docker image without cache..."
+                    echo "========================================="
+                    echo "Building Docker image with tag: ${IMAGE_TAG}"
+                    echo "========================================="
 
                     # Remove old image with same tag (if exists)
                     docker rmi ${IMAGE_NAME}:${IMAGE_TAG} 2>/dev/null || true
@@ -92,20 +95,17 @@ pipeline {
                     # Tag as latest as well (for local development)
                     docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
 
+                    echo ""
                     echo "========================================="
                     echo "Image details:"
                     echo "========================================="
-                    # FIXED: Using correct format without .ImageID
                     docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}" | grep ${IMAGE_NAME} || true
 
                     echo ""
                     echo "Image built successfully: ${IMAGE_NAME}:${IMAGE_TAG}"
 
                     # Verify the image has correct properties
-                    echo "========================================="
-                    echo "Verifying image properties..."
-                    echo "========================================="
-                    echo "Properties verification skipped"
+                    echo ""
 
                     # Check the image creation time
                     echo ""
@@ -159,7 +159,7 @@ pipeline {
                         echo "Image ${IMAGE_NAME}:${IMAGE_TAG} exists"
                     fi
 
-                    # Also ensure latest tag is updated (for local development)
+                    # Also ensure latest tag is updated
                     echo "Updating latest tag..."
                     docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest 2>/dev/null || true
 
@@ -187,7 +187,6 @@ spec:
       labels:
         app: ${APP_NAME}
         version: ${IMAGE_TAG}
-        deployment-date: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
     spec:
       containers:
       - name: ${APP_NAME}
@@ -378,7 +377,7 @@ EOF
                         echo ""
                         echo "Smoke tests passed!"
                     else
-                        echo "ERROR: Not all pods are running"
+                        echo "❌ ERROR: Not all pods are running"
                         echo "Expected: 1, Running: $RUNNING_PODS"
                         kubectl get pods -l app=${APP_NAME}
                         exit 1
@@ -391,7 +390,7 @@ EOF
     post {
         success {
             echo "=========================================="
-            echo "  Deployment Successful!"
+            echo "Deployment Successful!"
             echo "=========================================="
             echo "Application: ${APP_NAME}"
             echo "Version: ${IMAGE_TAG}"
