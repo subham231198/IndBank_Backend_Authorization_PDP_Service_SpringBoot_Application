@@ -8,8 +8,8 @@ pipeline {
     environment {
         APP_NAME   = "pdp-service"
         IMAGE_NAME = "pdp-service"
-        // Use Jenkins build number as tag
         IMAGE_TAG = "${env.BUILD_NUMBER}"
+        VERSION_LABEL = "v${env.BUILD_NUMBER}"
         NAMESPACE  = "default"
         APP_PORT   = "5059"
         HOSTNAME   = "app.pdp.in.bank.com"
@@ -86,28 +86,21 @@ pipeline {
                     echo "Building Docker image with tag: ${IMAGE_TAG}"
                     echo "========================================="
 
-                    # Remove old image with same tag (if exists)
                     docker rmi ${IMAGE_NAME}:${IMAGE_TAG} 2>/dev/null || true
 
-                    # Build with --no-cache and --pull to ensure fresh base image
                     docker build --no-cache --pull -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
-                    # Tag as latest as well (for local development)
                     docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
 
                     echo ""
                     echo "========================================="
                     echo "Image details:"
                     echo "========================================="
-                    docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}" | grep ${IMAGE_NAME} || true
+                    docker images --format "table {{.Repository}}\\t{{.Tag}}\\t{{.ID}}\\t{{.Size}}\\t{{.CreatedAt}}" | grep ${IMAGE_NAME} || true
 
                     echo ""
                     echo "Image built successfully: ${IMAGE_NAME}:${IMAGE_TAG}"
 
-                    # Verify the image has correct properties
-                    echo ""
-
-                    # Check the image creation time
                     echo ""
                     echo "Image creation time:"
                     docker inspect ${IMAGE_NAME}:${IMAGE_TAG} --format='{{.Created}}'
@@ -139,16 +132,15 @@ pipeline {
                 sh '''
                     echo "========================================="
                     echo "Deploying to Kubernetes with image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                    echo "Version Label: ${VERSION_LABEL}"
                     echo "========================================="
 
-                    # Delete existing resources
                     kubectl delete deployment ${APP_NAME} --ignore-not-found=true
                     kubectl delete service ${APP_NAME} --ignore-not-found=true
                     kubectl delete ingress ${APP_NAME}-ingress --ignore-not-found=true
 
                     sleep 3
 
-                    # Verify the image exists locally with the specific tag
                     echo "Verifying image exists locally: ${IMAGE_NAME}:${IMAGE_TAG}..."
                     if ! docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "^${IMAGE_NAME}:${IMAGE_TAG}$"; then
                         echo "Image ${IMAGE_NAME}:${IMAGE_TAG} not found!"
@@ -159,7 +151,6 @@ pipeline {
                         echo "Image ${IMAGE_NAME}:${IMAGE_TAG} exists"
                     fi
 
-                    # Also ensure latest tag is updated
                     echo "Updating latest tag..."
                     docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest 2>/dev/null || true
 
@@ -171,7 +162,7 @@ metadata:
   name: ${APP_NAME}
   labels:
     app: ${APP_NAME}
-    version: ${IMAGE_TAG}
+    version: ${VERSION_LABEL}
 spec:
   replicas: 1
   selector:
@@ -186,7 +177,7 @@ spec:
     metadata:
       labels:
         app: ${APP_NAME}
-        version: ${IMAGE_TAG}
+        version: ${VERSION_LABEL}
     spec:
       containers:
       - name: ${APP_NAME}
@@ -198,7 +189,7 @@ spec:
         - name: SERVER_PORT
           value: "${APP_PORT}"
         - name: APP_VERSION
-          value: "${IMAGE_TAG}"
+          value: "${VERSION_LABEL}"
         resources:
           requests:
             memory: "512Mi"
@@ -225,7 +216,7 @@ metadata:
   name: ${APP_NAME}
   labels:
     app: ${APP_NAME}
-    version: ${IMAGE_TAG}
+    version: ${VERSION_LABEL}
 spec:
   type: ClusterIP
   ports:
@@ -241,7 +232,7 @@ metadata:
   name: ${APP_NAME}-ingress
   labels:
     app: ${APP_NAME}
-    version: ${IMAGE_TAG}
+    version: ${VERSION_LABEL}
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
@@ -283,6 +274,7 @@ EOF
                     echo "========================================="
                     echo "Deployment successful!"
                     echo "Image: ${IMAGE_NAME}:${IMAGE_TAG}"
+                    echo "Version: ${VERSION_LABEL}"
                     echo "Host: ${HOSTNAME}"
                     echo "========================================="
                 '''
@@ -296,7 +288,6 @@ EOF
                     echo "Verifying deployment..."
                     echo "========================================="
 
-                    # Get the pod name
                     POD_NAME=$(kubectl get pods -l app=${APP_NAME} -o jsonpath='{.items[0].metadata.name}')
 
                     if [ -z "$POD_NAME" ]; then
@@ -307,17 +298,14 @@ EOF
                     echo "Pod Name: $POD_NAME"
                     echo ""
 
-                    # Check the image being used
                     echo "Image being used:"
                     kubectl describe pod $POD_NAME | grep "Image:"
                     echo ""
 
-                    # Check the actual image ID
                     echo "Image ID:"
                     kubectl describe pod $POD_NAME | grep "Image ID:"
                     echo ""
 
-                    # Verify the image matches what we built
                     ACTUAL_IMAGE=$(kubectl get pod $POD_NAME -o jsonpath='{.spec.containers[0].image}')
                     EXPECTED_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}"
 
@@ -331,14 +319,8 @@ EOF
                     fi
                     echo ""
 
-                    # Check logs
                     echo "Recent logs:"
                     kubectl logs $POD_NAME --tail=20 || true
-                    echo ""
-
-                    # Verify properties in the running pod
-                    echo "Properties in pod:"
-                    kubectl exec $POD_NAME -- sh -c "unzip -p /app/app.jar BOOT-INF/classes/application.properties | grep app.host 2>/dev/null || echo 'Properties check not available'"
                     echo ""
 
                     echo "========================================="
@@ -377,7 +359,7 @@ EOF
                         echo ""
                         echo "Smoke tests passed!"
                     else
-                        echo "❌ ERROR: Not all pods are running"
+                        echo "ERROR: Not all pods are running"
                         echo "Expected: 1, Running: $RUNNING_PODS"
                         kubectl get pods -l app=${APP_NAME}
                         exit 1
@@ -406,13 +388,11 @@ EOF
             sh '''
                 echo "Checking /etc/hosts entry..."
 
-                # Check if hostname already exists in /etc/hosts
                 if grep -q "${HOSTNAME}" /etc/hosts; then
                     echo "Hostname ${HOSTNAME} already exists in /etc/hosts"
                 else
                     echo "Attempting to add ${HOSTNAME} to /etc/hosts..."
 
-                    # Try without sudo first (if running as root)
                     if echo "127.0.0.1 ${HOSTNAME}" >> /etc/hosts 2>/dev/null; then
                         echo "Hostname added successfully without sudo!"
                     else
@@ -442,7 +422,7 @@ EOF
 
         failure {
             echo "=========================================="
-            echo "  Deployment Failed!"
+            echo "Deployment Failed!"
             echo "=========================================="
 
             sh '''
