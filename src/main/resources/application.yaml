@@ -13,6 +13,9 @@ spring:
       minimum-idle: 2
       connection-timeout: 30000
       idle-timeout: 600000
+  mvc:
+    async:
+      request-timeout: 300000
 
 logging:
   level:
@@ -38,6 +41,3 @@ server:
     max-connections: 20000
     accept-count: 200
 
-  mvc:
-    async:
-      request-timeout: 300000
