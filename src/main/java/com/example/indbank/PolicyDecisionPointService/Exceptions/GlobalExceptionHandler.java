@@ -146,13 +146,4 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(401).body(responseBody);
     }
 
-    @ExceptionHandler(ResourceAccessException.class)
-    public ResponseEntity<?> handleResourceAccessException(ResourceAccessException ex){
-        Map<String, Object> responseBody = new LinkedHashMap<>();
-        responseBody.put("code", 401);
-        responseBody.put("reason", "Unauthorized");
-        responseBody.put("message", ex.getMessage());
-        return ResponseEntity.status(401).body(responseBody);
-    }
-
 }
