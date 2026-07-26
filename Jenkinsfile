@@ -152,14 +152,13 @@ spec:
             memory: "1Gi"
             cpu: "500m"
         livenessProbe:
-          httpGet:
-            path: /actuator/health
+          tcpSocket:
             port: ${APP_PORT}
           initialDelaySeconds: 60
           periodSeconds: 10
+
         readinessProbe:
-          httpGet:
-            path: /actuator/health
+          tcpSocket:
             port: ${APP_PORT}
           initialDelaySeconds: 45
           periodSeconds: 5
