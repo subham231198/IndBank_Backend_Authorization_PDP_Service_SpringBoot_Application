@@ -268,8 +268,8 @@ EOF
                     echo "Checking pod status..."
                     RUNNING_PODS=$(kubectl get pods -l app=${APP_NAME} --field-selector=status.phase=Running -o name | wc -l | tr -d ' ')
 
-                    if [ "$RUNNING_PODS" = "5" ]; then
-                        echo "All 5 pods are running successfully!"
+                    if [ "$RUNNING_PODS" = "1" ]; then
+                        echo "Pod is running successfully!"
                         echo "Application is deployed and running."
 
                         echo ""
@@ -290,7 +290,7 @@ EOF
                         echo "Smoke tests passed!"
                     else
                         echo "ERROR: Not all pods are running"
-                        echo "Expected: 5, Running: $RUNNING_PODS"
+                        echo "Expected: 1, Running: $RUNNING_PODS"
                         kubectl get pods -l app=${APP_NAME}
                         exit 1
                     fi
