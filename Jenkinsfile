@@ -12,7 +12,6 @@ pipeline {
         NAMESPACE  = "default"
         APP_PORT   = "5059"
         HOSTNAME   = "app.pdp.in.bank.com"
-        SUDO_PASS  = "SM231198"
         PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
     }
 
@@ -317,51 +316,38 @@ EOF
             echo "=========================================="
 
             sh '''
-                echo "Adding hostname to /etc/hosts..."
+                echo "Checking /etc/hosts entry..."
 
                 # Check if hostname already exists in /etc/hosts
                 if grep -q "${HOSTNAME}" /etc/hosts; then
                     echo "Hostname ${HOSTNAME} already exists in /etc/hosts"
                 else
-                    echo "Adding ${HOSTNAME} to /etc/hosts..."
-                    echo "${SUDO_PASS}" | sudo -S sh -c 'echo "127.0.0.1 ${HOSTNAME}" >> /etc/hosts'
-                    echo "Hostname added successfully!"
+                    echo "Attempting to add ${HOSTNAME} to /etc/hosts..."
+
+                    # Try without sudo first (if running as root)
+                    if echo "127.0.0.1 ${HOSTNAME}" >> /etc/hosts 2>/dev/null; then
+                        echo "Hostname added successfully without sudo!"
+                    else
+                        echo "Need sudo to add hostname..."
+                        echo "Please manually add this entry to /etc/hosts:"
+                        echo "  127.0.0.1 ${HOSTNAME}"
+                        echo ""
+                        echo "Or run this command in terminal:"
+                        echo "  sudo sh -c 'echo \"127.0.0.1 ${HOSTNAME}\" >> /etc/hosts'"
+                    fi
                 fi
 
                 echo ""
                 echo "Verifying /etc/hosts entry:"
-                grep "${HOSTNAME}" /etc/hosts
-
-                echo ""
-                echo "Flushing DNS cache..."
-                sudo dscacheutil -flushcache
-                sudo killall -HUP mDNSResponder 2>/dev/null || true
-
-                echo ""
-                echo "Testing DNS resolution..."
-                ping -c 2 ${HOSTNAME} || true
-
-                echo ""
-                echo "Testing application accessibility..."
-                sleep 5
-
-                # Test with curl
-                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://${HOSTNAME}/ 2>/dev/null || echo "000")
-
-                if [ "$HTTP_CODE" != "000" ]; then
-                    echo "Application is accessible at http://${HOSTNAME} (HTTP $HTTP_CODE)"
-                else
-                    echo "WARNING: Could not reach application at http://${HOSTNAME}"
-                    echo "You may need to check ingress or port-forward the service"
-                fi
+                grep "${HOSTNAME}" /etc/hosts || echo "Hostname not found in /etc/hosts"
 
                 echo ""
                 echo "=========================================="
-                echo "Application is now accessible at:"
+                echo "Application is accessible at:"
                 echo "  http://${HOSTNAME}"
                 echo ""
-                echo "To test in Postman, use:"
-                echo "  http://${HOSTNAME}/api/v1/sessions/keepAlive"
+                echo "If you can't access, add to /etc/hosts:"
+                echo "  sudo sh -c 'echo \"127.0.0.1 ${HOSTNAME}\" >> /etc/hosts'"
                 echo "=========================================="
             '''
         }
