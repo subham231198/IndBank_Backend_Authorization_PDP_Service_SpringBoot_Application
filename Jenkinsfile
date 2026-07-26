@@ -83,22 +83,32 @@ pipeline {
                 sh '''
                     echo "Building Docker image without cache..."
 
+                    # Remove old image with same tag (if exists)
+                    docker rmi ${IMAGE_NAME}:${IMAGE_TAG} 2>/dev/null || true
+
                     # Build with --no-cache and --pull to ensure fresh base image
                     docker build --no-cache --pull -t ${IMAGE_NAME}:${IMAGE_TAG} .
 
                     # Tag as latest as well (for local development)
                     docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
 
+                    echo "========================================="
                     echo "Image details:"
-                    docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ImageID}}\t{{.Size}}\t{{.CreatedAt}}" | grep ${IMAGE_NAME}
+                    echo "========================================="
+                    # FIXED: Using correct format without .ImageID
+                    docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}\t{{.CreatedAt}}" | grep ${IMAGE_NAME} || true
 
+                    echo ""
                     echo "Image built successfully: ${IMAGE_NAME}:${IMAGE_TAG}"
 
                     # Verify the image has correct properties
+                    echo "========================================="
                     echo "Verifying image properties..."
-                    docker run --rm ${IMAGE_NAME}:${IMAGE_TAG} sh -c "unzip -p /app/app.jar BOOT-INF/classes/application.properties | grep app.host"
+                    echo "========================================="
+                    docker run --rm ${IMAGE_NAME}:${IMAGE_TAG} sh -c "unzip -p /app/app.jar BOOT-INF/classes/application.properties | grep app.host" || echo "Properties verification skipped"
 
                     # Check the image creation time
+                    echo ""
                     echo "Image creation time:"
                     docker inspect ${IMAGE_NAME}:${IMAGE_TAG} --format='{{.Created}}'
                 '''
@@ -155,101 +165,101 @@ pipeline {
 
                     echo "Creating deployment with version: ${IMAGE_TAG}..."
                     cat <<EOF | kubectl apply -f -
-        apiVersion: apps/v1
-        kind: Deployment
-        metadata:
-          name: ${APP_NAME}
-          labels:
-            app: ${APP_NAME}
-            version: ${IMAGE_TAG}
-        spec:
-          replicas: 1
-          selector:
-            matchLabels:
-              app: ${APP_NAME}
-          strategy:
-            type: RollingUpdate
-            rollingUpdate:
-              maxSurge: 1
-              maxUnavailable: 0
-          template:
-            metadata:
-              labels:
-                app: ${APP_NAME}
-                version: ${IMAGE_TAG}
-                deployment-date: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
-            spec:
-              containers:
-              - name: ${APP_NAME}
-                image: ${IMAGE_NAME}:${IMAGE_TAG}
-                imagePullPolicy: Always
-                ports:
-                - containerPort: ${APP_PORT}
-                env:
-                - name: SERVER_PORT
-                  value: "${APP_PORT}"
-                - name: APP_VERSION
-                  value: "${IMAGE_TAG}"
-                resources:
-                  requests:
-                    memory: "512Mi"
-                    cpu: "250m"
-                  limits:
-                    memory: "1Gi"
-                    cpu: "500m"
-                livenessProbe:
-                  tcpSocket:
-                    port: ${APP_PORT}
-                  initialDelaySeconds: 60
-                  periodSeconds: 10
-                  failureThreshold: 3
-                readinessProbe:
-                  tcpSocket:
-                    port: ${APP_PORT}
-                  initialDelaySeconds: 45
-                  periodSeconds: 5
-                  failureThreshold: 3
-        ---
-        apiVersion: v1
-        kind: Service
-        metadata:
-          name: ${APP_NAME}
-          labels:
-            app: ${APP_NAME}
-            version: ${IMAGE_TAG}
-        spec:
-          type: ClusterIP
-          ports:
-          - port: ${APP_PORT}
-            targetPort: ${APP_PORT}
-            name: http
-          selector:
-            app: ${APP_NAME}
-        ---
-        apiVersion: networking.k8s.io/v1
-        kind: Ingress
-        metadata:
-          name: ${APP_NAME}-ingress
-          labels:
-            app: ${APP_NAME}
-            version: ${IMAGE_TAG}
-          annotations:
-            nginx.ingress.kubernetes.io/rewrite-target: /
-            nginx.ingress.kubernetes.io/ssl-redirect: "false"
-        spec:
-          ingressClassName: nginx
-          rules:
-          - host: ${HOSTNAME}
-            http:
-              paths:
-              - path: /
-                pathType: Prefix
-                backend:
-                  service:
-                    name: ${APP_NAME}
-                    port:
-                      number: ${APP_PORT}
-        EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${APP_NAME}
+  labels:
+    app: ${APP_NAME}
+    version: ${IMAGE_TAG}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ${APP_NAME}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ${APP_NAME}
+        version: ${IMAGE_TAG}
+        deployment-date: $(date -u +'%Y-%m-%dT%H:%M:%SZ')
+    spec:
+      containers:
+      - name: ${APP_NAME}
+        image: ${IMAGE_NAME}:${IMAGE_TAG}
+        imagePullPolicy: Always
+        ports:
+        - containerPort: ${APP_PORT}
+        env:
+        - name: SERVER_PORT
+          value: "${APP_PORT}"
+        - name: APP_VERSION
+          value: "${IMAGE_TAG}"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          tcpSocket:
+            port: ${APP_PORT}
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: ${APP_PORT}
+          initialDelaySeconds: 45
+          periodSeconds: 5
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${APP_NAME}
+  labels:
+    app: ${APP_NAME}
+    version: ${IMAGE_TAG}
+spec:
+  type: ClusterIP
+  ports:
+  - port: ${APP_PORT}
+    targetPort: ${APP_PORT}
+    name: http
+  selector:
+    app: ${APP_NAME}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ${APP_NAME}-ingress
+  labels:
+    app: ${APP_NAME}
+    version: ${IMAGE_TAG}
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: ${HOSTNAME}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ${APP_NAME}
+            port:
+              number: ${APP_PORT}
+EOF
 
                     echo "Waiting for rollout to complete..."
                     kubectl rollout status deployment/${APP_NAME} --timeout=180s
@@ -324,7 +334,7 @@ pipeline {
 
                     # Check logs
                     echo "Recent logs:"
-                    kubectl logs $POD_NAME --tail=20
+                    kubectl logs $POD_NAME --tail=20 || true
                     echo ""
 
                     # Verify properties in the running pod
@@ -338,7 +348,6 @@ pipeline {
                 '''
             }
         }
-
 
         stage('Smoke Test') {
             steps {
@@ -382,7 +391,7 @@ pipeline {
     post {
         success {
             echo "=========================================="
-            echo "Deployment Successful!"
+            echo "  Deployment Successful!"
             echo "=========================================="
             echo "Application: ${APP_NAME}"
             echo "Version: ${IMAGE_TAG}"
@@ -434,7 +443,7 @@ pipeline {
 
         failure {
             echo "=========================================="
-            echo "Deployment Failed!"
+            echo "  Deployment Failed!"
             echo "=========================================="
 
             sh '''
