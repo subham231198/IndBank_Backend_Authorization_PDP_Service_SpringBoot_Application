@@ -6,13 +6,13 @@ pipeline {
     }
 
     environment {
-        APP_NAME   = "authentication-service"
-        IMAGE_NAME = "authentication-service"
+        APP_NAME   = "pdp-service"
+        IMAGE_NAME = "pdp-service"
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         VERSION_LABEL = "v${env.BUILD_NUMBER}"
         NAMESPACE  = "default"
-        APP_PORT   = "7079"
-        HOSTNAME   = "app.indbank.security.auth"
+        APP_PORT   = "5059"
+        HOSTNAME   = "app.pdp.in.bank.com"
         PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${env.PATH}"
     }
 
@@ -108,88 +108,6 @@ pipeline {
             }
         }
 
-        stage('Deploy MySQL') {
-            steps {
-                sh '''
-                    echo "========================================="
-                    echo "Checking MySQL deployment..."
-                    echo "========================================="
-
-                    if kubectl get deployment mysql &>/dev/null; then
-                        echo "MySQL deployment already exists, checking status..."
-                        kubectl rollout status deployment/mysql --timeout=30s
-                        echo "MySQL is already running"
-                    else
-                        echo "MySQL deployment not found, creating..."
-
-                        cat <<EOF | kubectl apply -f -
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mysql
-  labels:
-    app: mysql
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mysql
-  strategy:
-    type: Recreate
-  template:
-    metadata:
-      labels:
-        app: mysql
-    spec:
-      containers:
-      - name: mysql
-        image: mysql:8.0
-        env:
-        - name: MYSQL_ROOT_PASSWORD
-          value: "SM231198"
-        - name: MYSQL_DATABASE
-          value: "AuthenticationDB"
-        - name: MYSQL_ROOT_HOST
-          value: "%"
-        ports:
-        - containerPort: 3306
-        args:
-        - --default-authentication-plugin=mysql_native_password
-        - --character-set-server=utf8mb4
-        - --collation-server=utf8mb4_unicode_ci
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mysql-service
-spec:
-  selector:
-    app: mysql
-  ports:
-  - port: 3306
-    targetPort: 3306
-EOF
-
-                        echo "Waiting for MySQL to be ready..."
-                        kubectl rollout status deployment/mysql --timeout=120s
-                        echo "MySQL deployment completed"
-                    fi
-
-                    echo ""
-                    echo "MySQL Service Status:"
-                    kubectl get svc mysql-service
-                    kubectl get pods -l app=mysql
-                '''
-            }
-        }
-
         stage('Install Ingress Controller') {
             steps {
                 sh '''
@@ -268,26 +186,10 @@ spec:
         ports:
         - containerPort: ${APP_PORT}
         env:
-        - name: SPRING_DATASOURCE_URL
-          value: "jdbc:mysql://mysql-service:3306/AuthenticationDB?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
-        - name: SPRING_DATASOURCE_USERNAME
-          value: "root"
-        - name: SPRING_DATASOURCE_PASSWORD
-          value: "SM231198"
-        - name: SPRING_JPA_HIBERNATE_DDL_AUTO
-          value: "update"
-        - name: SPRING_JPA_SHOW_SQL
-          value: "true"
-        - name: SPRING_DATASOURCE_HIKARI_CONNECTION_TIMEOUT
-          value: "60000"
         - name: SERVER_PORT
           value: "${APP_PORT}"
         - name: APP_VERSION
           value: "${VERSION_LABEL}"
-        - name: SPRING_AUTOCONFIGURE_EXCLUDE
-          value: "org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration,org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration,org.springframework.boot.autoconfigure.session.SessionAutoConfiguration"
-        - name: SPRING_DATA_REDIS_REPOSITORIES_ENABLED
-          value: "false"
         resources:
           requests:
             memory: "512Mi"
@@ -298,15 +200,15 @@ spec:
         livenessProbe:
           tcpSocket:
             port: ${APP_PORT}
-          initialDelaySeconds: 120
+          initialDelaySeconds: 60
           periodSeconds: 10
-          failureThreshold: 10
+          failureThreshold: 3
         readinessProbe:
           tcpSocket:
             port: ${APP_PORT}
-          initialDelaySeconds: 90
+          initialDelaySeconds: 45
           periodSeconds: 5
-          failureThreshold: 10
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -534,10 +436,6 @@ EOF
                 echo "Pod Status:"
                 kubectl get pods -l app=${APP_NAME}
                 kubectl describe pods -l app=${APP_NAME} || echo "No pods found"
-
-                echo "MySQL Status:"
-                kubectl get pods -l app=mysql
-                kubectl describe pods -l app=mysql || echo "MySQL not found"
 
                 echo "Ingress Status:"
                 kubectl describe ingress ${APP_NAME}-ingress || echo "Ingress not found"
