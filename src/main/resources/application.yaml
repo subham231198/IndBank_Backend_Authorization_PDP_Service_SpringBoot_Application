@@ -13,9 +13,26 @@ spring:
       minimum-idle: 2
       connection-timeout: 30000
       idle-timeout: 600000
+
   mvc:
     async:
       request-timeout: 300000
+
+server:
+  port: 5059
+
+  tomcat:
+    connection-timeout: 300000
+    keep-alive-timeout: 300000
+    max-keep-alive-requests: 1000
+
+    threads:
+      max: 500
+      min-spare: 50
+
+    acceptor-thread-count: 2
+    max-connections: 20000
+    accept-count: 200
 
 logging:
   level:
@@ -24,20 +41,37 @@ logging:
     org.springframework.web: DEBUG
     org.springframework.web.client: DEBUG
     org.apache.hc.client5.http: DEBUG
+    io.github.resilience4j: DEBUG
 
-server:
-  port: 5059
-  tomcat:
-    # Prevent connection timeouts
-    connection-timeout: 300000  # 5 minutes
-    keep-alive-timeout: 300000  # 5 minutes
-    max-keep-alive-requests: 1000
-    # Thread pool to handle idle connections
-    threads:
-      max: 300
-      min-spare: 50
-    # Prevent socket timeouts
-    acceptor-thread-count: 2
-    max-connections: 20000
-    accept-count: 200
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,circuitbreakerevents
 
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+
+  health:
+    circuitbreakers:
+      enabled: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      authenticationService:
+        register-health-indicator: true
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - org.springframework.web.client.HttpServerErrorException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException

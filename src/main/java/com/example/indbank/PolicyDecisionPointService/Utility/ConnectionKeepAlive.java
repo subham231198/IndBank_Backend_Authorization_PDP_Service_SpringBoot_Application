@@ -1,12 +1,18 @@
 package com.example.indbank.PolicyDecisionPointService.Utility;
 
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -25,6 +31,7 @@ public class ConnectionKeepAlive {
     private String healthUrl;
 
 
+    @CircuitBreaker(name = "authenticationService", fallbackMethod = "healthError")
     @Scheduled(fixedDelay = 3000)
     public void keepAliveAuthentication() {
         try {
@@ -37,7 +44,7 @@ public class ConnectionKeepAlive {
         }
     }
 
-
+    @CircuitBreaker(name="health", fallbackMethod = "healthError")
     @Scheduled(fixedDelay = 3000)
     public void keepAliveAuthorization() {
         try {
@@ -48,5 +55,13 @@ public class ConnectionKeepAlive {
         catch (Exception e) {
             log.debug("Own Service health ping failed: {}", e.getMessage());
         }
+    }
+
+    public ResponseEntity<?> healthError() {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("code", "401");
+        response.put("reason", "Unauthorized");
+        response.put("message", "Health check failed!");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
 }

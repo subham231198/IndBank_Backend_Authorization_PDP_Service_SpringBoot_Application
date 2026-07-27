@@ -1,6 +1,7 @@
 package com.example.indbank.PolicyDecisionPointService.Service;
 
 import com.example.indbank.PolicyDecisionPointService.Utility.RestTemplateUtility;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -81,6 +82,8 @@ public class SessionAttributesService {
         }
     }
 
+
+    @CircuitBreaker(name = "authenticationService", fallbackMethod = "errorSessionAttributes")
     public Map<String, Object> SessionAttributes(String tokenId, String channel) {
         Map<String, Object> headers = new LinkedHashMap<>();
         headers.put("Content-Type", "application/json");
@@ -94,5 +97,13 @@ public class SessionAttributesService {
         String url = authenticationHost + sessionAttributesURL;
 
         return restTemplateUtility.sendPostRequest(url, request, headers);
+    }
+
+    public ResponseEntity<?> errorSessionAttributes() {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("code", "401");
+        response.put("reason", "Unauthorized");
+        response.put("message", "No response from downstream authentication service");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
     }
 }
