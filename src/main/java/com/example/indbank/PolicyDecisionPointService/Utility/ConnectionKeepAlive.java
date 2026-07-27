@@ -25,7 +25,7 @@ public class ConnectionKeepAlive {
     private String healthUrl;
 
 
-    @Scheduled(fixedDelay = 30000)
+    @Scheduled(fixedDelay = 3000)
     public void keepAliveAuthentication() {
         try {
             String url = authHost + healthUrl;
@@ -38,7 +38,7 @@ public class ConnectionKeepAlive {
     }
 
 
-    @Scheduled(fixedDelay = 20000)
+    @Scheduled(fixedDelay = 3000)
     public void keepAliveAuthorization() {
         try {
             String url = selfHost + healthUrl;
