@@ -18,12 +18,15 @@ public class ConnectionKeepAlive {
     @Value("${app.host.authentication.service}")
     private String authHost;
 
+    @Value("${app.host.pdp.service}")
+    private String selfHost;
+
     @Value("${app.url.authentication.service.health}")
     private String healthUrl;
 
 
     @Scheduled(fixedDelay = 30000)
-    public void keepAlive() {
+    public void keepAliveAuthentication() {
         try {
             String url = authHost + healthUrl;
             restTemplate.headForHeaders(url);
@@ -31,6 +34,19 @@ public class ConnectionKeepAlive {
         }
         catch (Exception e) {
             log.debug("Authentication Service health ping failed: {}", e.getMessage());
+        }
+    }
+
+
+    @Scheduled(fixedDelay = 20000)
+    public void keepAliveAuthorization() {
+        try {
+            String url = selfHost + healthUrl;
+            restTemplate.headForHeaders(url);
+            log.debug("Health ping to Own Service successful");
+        }
+        catch (Exception e) {
+            log.debug("Own Service health ping failed: {}", e.getMessage());
         }
     }
 }
